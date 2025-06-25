@@ -3,7 +3,7 @@
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
-
+import PIL.Image
 import torch
 from PIL import Image
 from torchvision import transforms as TF
@@ -94,6 +94,10 @@ def load_and_preprocess_images_square(image_path_list, target_size=1024):
     return images, original_coords
 
 
+def preprocess_images(images=[], mode='crop'):
+    pass
+
+
 def load_and_preprocess_images(image_path_list, mode="crop"):
     """
     A quick start function to load and preprocess images for model input.
@@ -137,7 +141,10 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
     # First process all images and collect their shapes
     for image_path in image_path_list:
         # Open image
-        img = Image.open(image_path)
+        if isinstance(image_path, str):
+            img = Image.open(image_path)
+        else:
+            img = PIL.Image.fromarray(image_path)
 
         # If there's an alpha channel, blend onto white background:
         if img.mode == "RGBA":
