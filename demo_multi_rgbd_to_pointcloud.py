@@ -19,6 +19,7 @@ from tqdm.auto import tqdm
 import viser
 import viser.transforms as viser_tf
 import cv2
+import open3d as o3d
 
 
 try:
@@ -542,9 +543,13 @@ def main():
     # start open3d windows
     vis = o3d.visualization.Visualizer()
     vis.create_window(window_name='Test', height=480, width=640, top=100, left=100)
+    pcd = o3d.geometry.PointCloud()
+    is_initialized = False
 
     global stop_rendering
     start_streams(pipelines, configs)
+
+
     try:
         #rendering_frames()
         while not stop_rendering:
@@ -571,8 +576,43 @@ def main():
                     # remove batch dimension and convert to numpy
                     predictions[key] = predictions[key].cpu().numpy().squeeze(0)
 
-            wp = predictions['world_points']
-            print(wp.shape)
+            ptSHW = predictions['world_points']
+            colorSHW = predictions['images']
+            colorSHW = colorSHW.transpose(0, 2, 3, 1)
+            print(ptSHW.shape)
+
+            ptN3 = ptSHW.reshape(-1, 3)
+            colorN3 = colorSHW.reshape(-1, 3)
+
+
+            # Convert numpy arrays to correct types
+            points = np.asarray(ptN3, dtype=np.float64)
+            colors = np.asarray(colorN3, dtype=np.float64)
+
+            # Validate input shapes
+            if points.shape[1] != 3:
+                raise ValueError("Points must be an Nx3 array")
+            if colors.shape[1] != 3:
+                raise ValueError("Colors must be an Nx3 array")
+            if points.shape[0] != colors.shape[0]:
+                raise ValueError("Points and colors must have the same number of points")
+
+            # Assign points and colors to the point cloud
+            pcd.points = o3d.utility.Vector3dVector(points)
+            pcd.colors = o3d.utility.Vector3dVector(colors)
+            print(pcd)
+
+            if not is_initialized:
+                vis.add_geometry(pcd)
+                is_initialized = True
+            else:
+                vis.update_geometry(pcd)
+
+            #vis.add_geometry(pcd, reset_bounding_box=False)
+            vis.poll_events()
+            vis.update_renderer()
+            time.sleep(0.01)
+            #vis.remove_geometry(pcd, reset_bounding_box=False)
 
             key = cv2.waitKey(1)
             if key == ord('q') or key == ESC_KEY:
