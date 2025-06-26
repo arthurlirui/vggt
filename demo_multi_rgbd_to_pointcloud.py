@@ -579,11 +579,11 @@ def main():
             ptSHW = predictions['world_points']
             colorSHW = predictions['images']
             colorSHW = colorSHW.transpose(0, 2, 3, 1)
+            colorSHW = colorSHW[..., ::-1]
             print(ptSHW.shape)
 
             ptN3 = ptSHW.reshape(-1, 3)
             colorN3 = colorSHW.reshape(-1, 3)
-
 
             # Convert numpy arrays to correct types
             points = np.asarray(ptN3, dtype=np.float64)
