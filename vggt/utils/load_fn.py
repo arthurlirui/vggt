@@ -136,7 +136,8 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
     images = []
     shapes = set()
     to_tensor = TF.ToTensor()
-    target_size = 518
+    unit_sz = 14
+    target_size = 46*unit_sz
 
     # First process all images and collect their shapes
     for image_path in image_path_list:
@@ -162,15 +163,15 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
             # Make the largest dimension 518px while maintaining aspect ratio
             if width >= height:
                 new_width = target_size
-                new_height = round(height * (new_width / width) / 14) * 14  # Make divisible by 14
+                new_height = round(height * (new_width / width) / unit_sz) * unit_sz  # Make divisible by 14
             else:
                 new_height = target_size
-                new_width = round(width * (new_height / height) / 14) * 14  # Make divisible by 14
+                new_width = round(width * (new_height / height) / unit_sz) * unit_sz  # Make divisible by 14
         else:  # mode == "crop"
             # Original behavior: set width to 518px
             new_width = target_size
             # Calculate height maintaining aspect ratio, divisible by 14
-            new_height = round(height * (new_width / width) / 14) * 14
+            new_height = round(height * (new_width / width) / unit_sz) * unit_sz
 
         # Resize with new dimensions (width, height)
         img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)

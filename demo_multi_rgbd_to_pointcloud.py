@@ -549,7 +549,6 @@ def main():
     global stop_rendering
     start_streams(pipelines, configs)
 
-
     try:
         #rendering_frames()
         while not stop_rendering:
@@ -578,9 +577,10 @@ def main():
 
             ptSHW = predictions['world_points']
             colorSHW = predictions['images']
+            depthSHW = predictions['depth']
             colorSHW = colorSHW.transpose(0, 2, 3, 1)
             colorSHW = colorSHW[..., ::-1]
-            print(ptSHW.shape)
+            print(ptSHW.shape, depthSHW.shape)
 
             ptN3 = ptSHW.reshape(-1, 3)
             colorN3 = colorSHW.reshape(-1, 3)
@@ -613,6 +613,9 @@ def main():
             vis.update_renderer()
             time.sleep(0.01)
             #vis.remove_geometry(pcd, reset_bounding_box=False)
+            cv2.imshow('Depth-0', depthSHW[..., 0, :, :, 0])
+            cv2.imshow('Depth-1', depthSHW[..., 1, :, :, 0])
+            cv2.imshow('Depth-2', depthSHW[..., 2, :, :, 0])
 
             key = cv2.waitKey(1)
             if key == ord('q') or key == ESC_KEY:
@@ -620,23 +623,11 @@ def main():
                 break
         #cv2.destroyAllWindows()
 
-
-        '''
-        viser_server = viser_wrapper(
-            predictions,
-            port=args.port,
-            init_conf_threshold=args.conf_threshold,
-            use_point_map=args.use_point_map,
-            background_mode=args.background_mode,
-            mask_sky=args.mask_sky,
-            image_folder=args.image_folder)
-        '''
-
     except KeyboardInterrupt:
         stop_rendering = True
     finally:
         stop_streams(pipelines)
-        #cv2.destroyAllWindows()
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
