@@ -99,8 +99,7 @@ def rendering_frames():
 
                 depth_data = depth_data.astype(np.float32) * scale
 
-                depth_image = cv2.normalize(depth_data, None, 0, 255, cv2.NORM_MINMAX,
-                                            dtype=cv2.CV_8U)
+                depth_image = cv2.normalize(depth_data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
                 depth_image = cv2.applyColorMap(depth_image, cv2.COLORMAP_JET)
 
             if color_image is not None and depth_image is not None:
