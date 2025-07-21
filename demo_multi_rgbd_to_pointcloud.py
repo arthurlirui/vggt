@@ -33,7 +33,7 @@ from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.geometry import closed_form_inverse_se3, unproject_depth_map_to_point_map
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
-MAX_DEVICES = 3
+MAX_DEVICES = 5
 curr_device_cnt = 0
 
 MAX_QUEUE_SIZE = 5
@@ -541,7 +541,7 @@ def main():
 
     # start open3d windows
     vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name='Test', height=480, width=640, top=100, left=100)
+    vis.create_window(window_name='3D Scene - RGB', height=480, width=640, top=100, left=100)
     pcd = o3d.geometry.PointCloud()
     is_initialized = False
 
@@ -567,6 +567,8 @@ def main():
             extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
             predictions["extrinsic"] = extrinsic
             predictions["intrinsic"] = intrinsic
+            print(extrinsic)
+            print(intrinsic)
 
             print("Processing model outputs...")
             for key in predictions.keys():
