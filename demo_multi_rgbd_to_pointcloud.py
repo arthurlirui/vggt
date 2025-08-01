@@ -552,7 +552,7 @@ def main():
         #rendering_frames()
         while not stop_rendering:
             images = capture_frames()
-            print(len(images))
+            #print(len(images))
             if len(images) < MAX_DEVICES:
                 continue
             images = load_and_preprocess_images(image_path_list=images)
@@ -567,8 +567,8 @@ def main():
             extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
             predictions["extrinsic"] = extrinsic
             predictions["intrinsic"] = intrinsic
-            print(extrinsic)
-            print(intrinsic)
+            #print(extrinsic)
+            #print(intrinsic)
 
             print("Processing model outputs...")
             for key in predictions.keys():
@@ -581,7 +581,7 @@ def main():
             depthSHW = predictions['depth']
             colorSHW = colorSHW.transpose(0, 2, 3, 1)
             colorSHW = colorSHW[..., ::-1]
-            print(ptSHW.shape, depthSHW.shape)
+            #print(ptSHW.shape, depthSHW.shape)
 
             ptN3 = ptSHW.reshape(-1, 3)
             colorN3 = colorSHW.reshape(-1, 3)
@@ -601,7 +601,7 @@ def main():
             # Assign points and colors to the point cloud
             pcd.points = o3d.utility.Vector3dVector(points)
             pcd.colors = o3d.utility.Vector3dVector(colors)
-            print(pcd)
+            #print(pcd)
 
             if not is_initialized:
                 vis.add_geometry(pcd)
@@ -612,11 +612,11 @@ def main():
             #vis.add_geometry(pcd, reset_bounding_box=False)
             vis.poll_events()
             vis.update_renderer()
-            time.sleep(0.01)
+            time.sleep(0.001)
             #vis.remove_geometry(pcd, reset_bounding_box=False)
             cv2.imshow('Depth-0', depthSHW[..., 0, :, :, 0])
-            cv2.imshow('Depth-1', depthSHW[..., 1, :, :, 0])
-            cv2.imshow('Depth-2', depthSHW[..., 2, :, :, 0])
+            #cv2.imshow('Depth-1', depthSHW[..., 1, :, :, 0])
+            #cv2.imshow('Depth-2', depthSHW[..., 2, :, :, 0])
 
             key = cv2.waitKey(1)
             if key == ord('q') or key == ESC_KEY:
