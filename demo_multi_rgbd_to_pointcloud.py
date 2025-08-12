@@ -20,6 +20,7 @@ import viser
 import viser.transforms as viser_tf
 import cv2
 import open3d as o3d
+from pprint import pprint
 
 
 try:
@@ -460,6 +461,55 @@ def apply_sky_segmentation(conf: np.ndarray, image_folder: str) -> np.ndarray:
     return conf
 
 
+def visualize_camera_pose(camera_poses, camera_intrinsic):
+    # Create a coordinate frame to represent world origin
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+
+    # Create a dummy point cloud for context (optional)
+    point_cloud = o3d.geometry.PointCloud()
+    point_cloud.points = o3d.utility.Vector3dVector(np.random.rand(100, 3))
+
+    # Define camera intrinsic parameters
+    intrinsic = o3d.camera.PinholeCameraIntrinsic(width=640, height=480, fx=525.0, fy=525.0, cx=320.0, cy=240.0)
+
+    # Create camera poses (4x4 transformation matrices)
+    # This is a list of example poses - replace with your actual camera poses
+    '''
+    camera_poses = [
+        np.array([
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 5],
+            [0, 0, 0, 1]
+        ]),
+        np.array([
+            [0, -1, 0, 2],
+            [1, 0, 0, 1],
+            [0, 0, 1, 4],
+            [0, 0, 0, 1]
+        ])
+    ]
+    '''
+
+
+    # Create camera frustums for visualization
+    camera_frustums = []
+    for pose in camera_poses:
+        frustum = o3d.geometry.LineSet.create_camera_visualization(
+            intrinsic=intrinsic,
+            extrinsic=np.linalg.inv(pose),  # Open3D expects camera-to-world
+            scale=0.5
+        )
+        camera_frustums.append(frustum)
+
+    # Visualize everything together
+    o3d.visualization.draw_geometries([coordinate_frame, point_cloud] + camera_frustums)
+
+def visualize_camera_trajectory():
+    pass
+
+
+
 def main():
     parser = argparse.ArgumentParser(description="VGGT demo with viser for 3D visualization")
     parser.add_argument(
@@ -567,8 +617,19 @@ def main():
             extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
             predictions["extrinsic"] = extrinsic
             predictions["intrinsic"] = intrinsic
-            #print(extrinsic)
-            #print(intrinsic)
+            pprint(extrinsic)
+            pprint(intrinsic)
+            extrinsic_cpu = extrinsic.cpu().numpy().squeeze(0)
+            intrinsic_cpu = intrinsic.cpu().numpy().squeeze(0)
+            extrinsic_list = [extrinsic_cpu[i, :, :] for i in range(len(device_list))]
+            intrinsic_list = [intrinsic_cpu[i, :, :] for i in range(len(device_list))]
+
+
+
+            pprint(extrinsic_list)
+            pprint(intrinsic_list)
+
+            continue
 
             print("Processing model outputs...")
             for key in predictions.keys():
