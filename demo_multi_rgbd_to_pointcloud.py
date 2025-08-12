@@ -614,7 +614,14 @@ def main():
             vis.update_renderer()
             time.sleep(0.001)
             #vis.remove_geometry(pcd, reset_bounding_box=False)
-            cv2.imshow('Depth-0', depthSHW[..., 0, :, :, 0])
+            #cv2.imshow('Depth-0', depthSHW[..., 0, :, :, 0])
+
+            for i in range(MAX_DEVICES):
+                img = colorSHW[..., i, :, :, 0:3]
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                cv2.imshow(f'Color-{i}', img)
+
+
             #cv2.imshow('Depth-1', depthSHW[..., 1, :, :, 0])
             #cv2.imshow('Depth-2', depthSHW[..., 2, :, :, 0])
 
