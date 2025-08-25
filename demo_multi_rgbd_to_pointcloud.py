@@ -34,7 +34,7 @@ from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.geometry import closed_form_inverse_se3, unproject_depth_map_to_point_map
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
-MAX_DEVICES = 5
+MAX_DEVICES = 3
 curr_device_cnt = 0
 
 MAX_QUEUE_SIZE = 5
@@ -598,6 +598,7 @@ def main():
     global stop_rendering
     start_streams(pipelines, configs)
 
+    start_time = time.time()
     try:
         #rendering_frames()
         while not stop_rendering:
@@ -617,19 +618,16 @@ def main():
             extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
             predictions["extrinsic"] = extrinsic
             predictions["intrinsic"] = intrinsic
-            pprint(extrinsic)
-            pprint(intrinsic)
+            #pprint(extrinsic)
+            #pprint(intrinsic)
             extrinsic_cpu = extrinsic.cpu().numpy().squeeze(0)
             intrinsic_cpu = intrinsic.cpu().numpy().squeeze(0)
             extrinsic_list = [extrinsic_cpu[i, :, :] for i in range(len(device_list))]
             intrinsic_list = [intrinsic_cpu[i, :, :] for i in range(len(device_list))]
 
-
-
-            pprint(extrinsic_list)
-            pprint(intrinsic_list)
-
-            continue
+            #pprint(extrinsic_list)
+            #pprint(intrinsic_list)
+            #continue
 
             print("Processing model outputs...")
             for key in predictions.keys():
@@ -681,6 +679,9 @@ def main():
                 img = colorSHW[..., i, :, :, 0:3]
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 cv2.imshow(f'Color-{i}', img)
+                end_time = time.time()
+                #if end_time - start_time > 10:
+                    #cv2.imwrite(os.path.join('tmp', f'rgb_{i}_{end_time}.jpg'), img*255)
 
 
             #cv2.imshow('Depth-1', depthSHW[..., 1, :, :, 0])
