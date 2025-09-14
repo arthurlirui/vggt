@@ -506,6 +506,17 @@ def visualize_camera_trajectory():
     pass
 
 
+def setup_imu():
+    """Setup IMU configuration"""
+    pipeline = Pipeline()
+    config = Config()
+    config.enable_accel_stream()
+    config.enable_gyro_stream()
+    pipeline.start(config)
+    return pipeline
+
+
+
 def main():
     parser = argparse.ArgumentParser(description="VGGT demo with viser for 3D visualization")
     parser.add_argument(
@@ -565,6 +576,7 @@ def main():
         print("Too many devices connected")
         return
     pipelines: List[Pipeline] = []
+    IMU_pipelines
     configs: List[Config] = []
     global has_color_sensor
     for i in range(device_list.get_count()):
