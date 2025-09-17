@@ -37,7 +37,7 @@ from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 MAX_DEVICES = 5
 curr_device_cnt = 0
 
-MAX_QUEUE_SIZE = 5
+MAX_QUEUE_SIZE = 6
 ESC_KEY = 27
 
 color_frames_queue: List[Queue] = [Queue() for _ in range(MAX_DEVICES)]
@@ -179,8 +179,7 @@ def start_streams(pipelines: List[Pipeline], configs: List[Config]):
     index = 0
     for pipeline, config in zip(pipelines, configs):
         print("Starting device {}".format(index))
-        pipeline.start(config, lambda frame_set, curr_index=index: on_new_frame_callback(frame_set,
-                                                                                         curr_index))
+        pipeline.start(config, lambda frame_set, curr_index=index: on_new_frame_callback(frame_set, curr_index))
         index += 1
 
 def stop_streams(pipelines: List[Pipeline]):
@@ -508,15 +507,11 @@ def visualize_camera_trajectory():
 
 def main():
     parser = argparse.ArgumentParser(description="VGGT demo with viser for 3D visualization")
-    parser.add_argument(
-        "--image_folder", type=str, default="examples/kitchen/images/", help="Path to folder containing images"
-    )
+    parser.add_argument("--image_folder", type=str, default="examples/kitchen/images/", help="Path to folder containing images")
     parser.add_argument("--use_point_map", action="store_true", help="Use point map instead of depth-based points")
     parser.add_argument("--background_mode", action="store_true", help="Run the viser server in background mode")
     parser.add_argument("--port", type=int, default=8080, help="Port number for the viser server")
-    parser.add_argument(
-        "--conf_threshold", type=float, default=25.0, help="Initial percentage of low-confidence points to filter out"
-    )
+    parser.add_argument("--conf_threshold", type=float, default=25.0, help="Initial percentage of low-confidence points to filter out")
     parser.add_argument("--mask_sky", action="store_true", help="Apply sky segmentation to filter out sky points")
 
     """
