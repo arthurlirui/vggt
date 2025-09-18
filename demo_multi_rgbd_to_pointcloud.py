@@ -604,7 +604,7 @@ def main():
             #print(len(images))
             if len(images) < MAX_DEVICES:
                 continue
-            images = load_and_preprocess_images(image_path_list=images)
+            images = load_and_preprocess_images(image_path_list=images, mode="crop")
             images = images.to(device)
             print(f"Preprocessed images shape: {images.shape}")
             print("Running inference...")

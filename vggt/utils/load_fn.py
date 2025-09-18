@@ -137,7 +137,7 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
     shapes = set()
     to_tensor = TF.ToTensor()
     unit_sz = 14
-    target_size = 40*unit_sz
+    target_size = 50*unit_sz
 
     # First process all images and collect their shapes
     for image_path in image_path_list:
@@ -158,6 +158,8 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
         img = img.convert("RGB")
 
         width, height = img.size
+        #if width > target_size:
+        #    img = img.resize(target_size)
 
         if mode == "pad":
             # Make the largest dimension 518px while maintaining aspect ratio
@@ -174,13 +176,25 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
             new_height = round(height * (new_width / width) / unit_sz) * unit_sz
 
         # Resize with new dimensions (width, height)
-        img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
-        img = to_tensor(img)  # Convert to tensor (0, 1)
+        if False:
+            img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
+            img = to_tensor(img)  # Convert to tensor (0, 1)
+
+        # center-cropped the image no resize
+        if True:
+            w1, h1 = int(width/3*2), int(height/3*2)
+            img = img.resize((w1, h1), Image.Resampling.BICUBIC)
+            #img = to_tensor(img)  # Convert to tensor (0, 1)
+            img = to_tensor(img)
+            if height > target_size and width > target_size:
+                start_x = (w1 - new_width) // 2
+                start_y = (h1 - new_height) // 2
+                img = img[:, start_y: start_y + new_height, start_x: start_x+new_width]
 
         # Center crop height if it's larger than 518 (only in crop mode)
         if mode == "crop" and new_height > target_size:
             start_y = (new_height - target_size) // 2
-            img = img[:, start_y : start_y + target_size, :]
+            img = img[:, start_y: start_y + target_size, :]
 
         # For pad mode, pad to make a square of target_size x target_size
         if mode == "pad":
