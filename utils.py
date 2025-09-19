@@ -17,7 +17,7 @@ from typing import Union, Any, Optional
 
 import cv2
 import numpy as np
-
+import pickle
 from pyorbbecsdk import FormatConvertFilter, VideoFrame
 from pyorbbecsdk import OBFormat, OBConvertFormat
 
@@ -125,3 +125,22 @@ def frame_to_bgr_image(frame: VideoFrame) -> Union[Optional[np.array], Any]:
         print("Unsupported color format: {}".format(color_format))
         return None
     return image
+
+
+def save_images(images=[]):
+    print("saving images")
+
+
+def save_pointcloud(pcs=[]):
+    print("saving pointcloud")
+
+
+def save_depth(depths=[]):
+    print("saving depth")
+
+
+def save_data(save_path='t.pkl', data=[]):
+    print("saving data")
+    # Save the complete dataset
+    with open(f'{save_path}', 'wb') as f:
+        pickle.dump(data, f)

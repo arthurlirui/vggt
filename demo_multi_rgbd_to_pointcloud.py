@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 from pyorbbecsdk import *
 from pyorbbecsdk import FrameSet, OBFormat, Pipeline, Config, Context
+
+import utils
 from utils import frame_to_bgr_image
 
 import os
@@ -505,6 +507,18 @@ def visualize_camera_trajectory():
     pass
 
 
+def init_data_dict():
+    data_dict = {
+        'images': None,
+        'points': None,
+        'colors': None,
+        'depths': None,
+        'time': None,
+        'index': None
+        }
+    return data_dict
+
+
 def main():
     parser = argparse.ArgumentParser(description="VGGT demo with viser for 3D visualization")
     parser.add_argument("--image_folder", type=str, default="examples/kitchen/images/", help="Path to folder containing images")
@@ -513,6 +527,9 @@ def main():
     parser.add_argument("--port", type=int, default=8080, help="Port number for the viser server")
     parser.add_argument("--conf_threshold", type=float, default=25.0, help="Initial percentage of low-confidence points to filter out")
     parser.add_argument("--mask_sky", action="store_true", help="Apply sky segmentation to filter out sky points")
+
+    parser.add_argument("--save_data", action="store_true", help="save images, point cloud and depth")
+    parser.add_argument("--save_path", type=str, default="./saved", help="save path data")
 
     """
         Main function for the VGGT demo with viser for 3D visualization.
@@ -533,6 +550,7 @@ def main():
         --mask_sky: Apply sky segmentation to filter out sky points
     """
     args = parser.parse_args()
+    print(args)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
@@ -561,6 +579,10 @@ def main():
         return
     pipelines: List[Pipeline] = []
     configs: List[Config] = []
+    images_buf = []
+    pcs_buf = []
+    depth_buf = []
+    saved_data = []
     global has_color_sensor
     for i in range(device_list.get_count()):
         camera = device_list.get_device_by_index(i)
@@ -597,14 +619,17 @@ def main():
     start_streams(pipelines, configs)
 
     start_time = time.time()
+    index = 0
     try:
         #rendering_frames()
         while not stop_rendering:
             images = capture_frames()
             #print(len(images))
+            data_dict = init_data_dict()
             if len(images) < MAX_DEVICES:
                 continue
             images = load_and_preprocess_images(image_path_list=images, mode="crop")
+
             images = images.to(device)
             print(f"Preprocessed images shape: {images.shape}")
             print("Running inference...")
@@ -647,6 +672,10 @@ def main():
             points = np.asarray(ptN3, dtype=np.float64)
             colors = np.asarray(colorN3, dtype=np.float64)
 
+            if args.save_data:
+                data_dict['colors'] = colors
+                data_dict['points'] = points
+
             # Validate input shapes
             if points.shape[1] != 3:
                 raise ValueError("Points must be an Nx3 array")
@@ -658,7 +687,7 @@ def main():
             # Assign points and colors to the point cloud
             pcd.points = o3d.utility.Vector3dVector(points)
             pcd.colors = o3d.utility.Vector3dVector(colors)
-            #print(pcd)
+            print(pcd)
 
             if not is_initialized:
                 vis.add_geometry(pcd)
@@ -671,12 +700,23 @@ def main():
             vis.update_renderer()
             time.sleep(0.001)
             #vis.remove_geometry(pcd, reset_bounding_box=False)
-            #cv2.imshow('Depth-0', depthSHW[..., 0, :, :, 0])
+
+            if args.save_data:
+                data_dict['images'] = colorSHW
+                data_dict['depth'] = depthSHW
+                data_dict['time'] = time.time()
+
+                data_dict['index'] = index
+                saved_data.append(data_dict)
+
+            index += 1
 
             for i in range(MAX_DEVICES):
                 img = colorSHW[..., i, :, :, 0:3]
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 cv2.imshow(f'Color-{i}', img)
+                depth = depthSHW[..., i, :, :, 0]
+                cv2.imshow(f'Depth-{i}', depth)
                 end_time = time.time()
                 #if end_time - start_time > 10:
                     #cv2.imwrite(os.path.join('tmp', f'rgb_{i}_{end_time}.jpg'), img*255)
@@ -688,6 +728,12 @@ def main():
             key = cv2.waitKey(1)
             if key == ord('q') or key == ESC_KEY:
                 stop_rendering = True
+                if args.save_data:
+                    #utils.save_pointcloud(pcs_buf)
+                    #utils.save_images(images_buf)
+                    #utils.save_depth(depth_buf)
+                    #for d in saved_data:
+                    utils.save_data(os.path.join(args.save_path, f'frames_%04d.pkl' % index), saved_data)
                 break
         #cv2.destroyAllWindows()
 

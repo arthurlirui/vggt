@@ -137,7 +137,7 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
     shapes = set()
     to_tensor = TF.ToTensor()
     unit_sz = 14
-    target_size = 50*unit_sz
+    target_size = 37*unit_sz
 
     # First process all images and collect their shapes
     for image_path in image_path_list:
