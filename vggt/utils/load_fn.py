@@ -137,13 +137,14 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
     shapes = set()
     to_tensor = TF.ToTensor()
     unit_sz = 14
-    target_size = 37*unit_sz
+    target_size = 38*unit_sz
 
     # First process all images and collect their shapes
     for image_path in image_path_list:
         # Open image
         if isinstance(image_path, str):
             img = Image.open(image_path)
+            #img = Image
         else:
             img = PIL.Image.fromarray(image_path)
 
@@ -156,6 +157,7 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
 
         # Now convert to "RGB" (this step assigns white for transparent areas)
         img = img.convert("RGB")
+        #img = img.convert("BGR")
 
         width, height = img.size
         #if width > target_size:
@@ -182,7 +184,7 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
 
         # center-cropped the image no resize
         if True:
-            w1, h1 = int(width/3*2), int(height/3*2)
+            w1, h1 = int(width//2), int(height//2)
             img = img.resize((w1, h1), Image.Resampling.BICUBIC)
             #img = to_tensor(img)  # Convert to tensor (0, 1)
             img = to_tensor(img)

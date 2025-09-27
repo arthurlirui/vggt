@@ -13,6 +13,8 @@ import copy
 import cv2
 import os
 import requests
+import open3d as o3d
+import numpy as np
 
 
 def predictions_to_glb(
@@ -455,3 +457,46 @@ def download_file_from_url(url, filename):
 
     except requests.exceptions.RequestException as e:
         print(f"Error downloading file: {e}")
+
+
+def render_multiple_views(mesh, output_dir="output_views"):
+    import os
+    os.makedirs(output_dir, exist_ok=True)
+
+    vis = o3d.visualization.Visualizer()
+    vis.create_window(visible=False, width=1024, height=768)
+    vis.add_geometry(mesh)
+
+    # 获取视图控制器
+    ctr = vis.get_view_control()
+
+    # 定义多个视角参数
+    view_params = [
+        {"front": [1, 0, 0], "lookat": [0, 0, 0], "up": [0, 1, 0], "zoom": 0.8},
+        {"front": [0, 1, 0], "lookat": [0, 0, 0], "up": [0, 0, 1], "zoom": 0.8},
+        {"front": [0, 0, 1], "lookat": [0, 0, 0], "up": [0, 1, 0], "zoom": 0.8},
+    ]
+
+    for i, params in enumerate(view_params):
+        # 设置视角
+        ctr.set_front(params["front"])
+        ctr.set_lookat(params["lookat"])
+        ctr.set_up(params["up"])
+        ctr.set_zoom(params["zoom"])
+
+        # 更新渲染
+        vis.update_geometry(mesh)
+        vis.poll_events()
+        vis.update_renderer()
+
+        # 保存图像
+        filename = f"{output_dir}/view_{i:02d}.png"
+        vis.capture_screen_image(filename)
+        print(f"Saved: {filename}")
+
+    vis.destroy_window()
+
+
+# 使用示例
+#mesh = o3d.geometry.TriangleMesh.create_sphere()
+#render_multiple_views(mesh)

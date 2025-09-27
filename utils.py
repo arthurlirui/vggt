@@ -144,3 +144,24 @@ def save_data(save_path='t.pkl', data=[]):
     # Save the complete dataset
     with open(f'{save_path}', 'wb') as f:
         pickle.dump(data, f)
+
+
+def load_data(data_path=''):
+    # Load and verify
+    with open(data_path, 'rb') as f:
+        loaded_data = pickle.load(f)
+        #print(loaded_data)
+    return loaded_data
+
+def init_data_dict():
+    data_dict = {
+        'images': None,
+        'points': None,
+        'colors': None,
+        'depths': None,
+        'extrinsic': None,
+        'intrinsic': None,
+        'time': None,
+        'index': None
+        }
+    return data_dict

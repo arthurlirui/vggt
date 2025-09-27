@@ -23,7 +23,8 @@ import viser.transforms as viser_tf
 import cv2
 import open3d as o3d
 from pprint import pprint
-
+import ba.buddle_adjustment as BA
+from utils import init_data_dict, load_data
 
 try:
     import onnxruntime
@@ -46,6 +47,7 @@ color_frames_queue: List[Queue] = [Queue() for _ in range(MAX_DEVICES)]
 depth_frames_queue: List[Queue] = [Queue() for _ in range(MAX_DEVICES)]
 has_color_sensor: List[bool] = [False for _ in range(MAX_DEVICES)]
 stop_rendering = False
+start_record = False
 
 
 def on_new_frame_callback(frames: FrameSet, index: int):
@@ -507,18 +509,6 @@ def visualize_camera_trajectory():
     pass
 
 
-def init_data_dict():
-    data_dict = {
-        'images': None,
-        'points': None,
-        'colors': None,
-        'depths': None,
-        'time': None,
-        'index': None
-        }
-    return data_dict
-
-
 def main():
     parser = argparse.ArgumentParser(description="VGGT demo with viser for 3D visualization")
     parser.add_argument("--image_folder", type=str, default="examples/kitchen/images/", help="Path to folder containing images")
@@ -527,9 +517,8 @@ def main():
     parser.add_argument("--port", type=int, default=8080, help="Port number for the viser server")
     parser.add_argument("--conf_threshold", type=float, default=25.0, help="Initial percentage of low-confidence points to filter out")
     parser.add_argument("--mask_sky", action="store_true", help="Apply sky segmentation to filter out sky points")
-
     parser.add_argument("--save_data", action="store_true", help="save images, point cloud and depth")
-    parser.add_argument("--save_path", type=str, default="./saved", help="save path data")
+    parser.add_argument("--save_path", type=str, default="D:\\Code\\vggt\\saved", help="save path data")
 
     """
         Main function for the VGGT demo with viser for 3D visualization.
@@ -615,7 +604,7 @@ def main():
     pcd = o3d.geometry.PointCloud()
     is_initialized = False
 
-    global stop_rendering
+    global stop_rendering, start_record
     start_streams(pipelines, configs)
 
     start_time = time.time()
@@ -663,7 +652,9 @@ def main():
             depthSHW = predictions['depth']
             colorSHW = colorSHW.transpose(0, 2, 3, 1)
             colorSHW = colorSHW[..., ::-1]
-            #print(ptSHW.shape, depthSHW.shape)
+            print('Point cloud shape:', ptSHW.shape)
+            print('Color shape:', colorSHW.shape)
+            print('Depth shape:', depthSHW.shape)
 
             ptN3 = ptSHW.reshape(-1, 3)
             colorN3 = colorSHW.reshape(-1, 3)
@@ -672,7 +663,7 @@ def main():
             points = np.asarray(ptN3, dtype=np.float64)
             colors = np.asarray(colorN3, dtype=np.float64)
 
-            if args.save_data:
+            if args.save_data and start_record:
                 data_dict['colors'] = colors
                 data_dict['points'] = points
 
@@ -701,12 +692,13 @@ def main():
             time.sleep(0.001)
             #vis.remove_geometry(pcd, reset_bounding_box=False)
 
-            if args.save_data:
+            if args.save_data and start_record:
                 data_dict['images'] = colorSHW
                 data_dict['depth'] = depthSHW
                 data_dict['time'] = time.time()
-
                 data_dict['index'] = index
+                data_dict['intrinsic'] = intrinsic
+                data_dict['extrinsic'] = extrinsic
                 saved_data.append(data_dict)
 
             index += 1
@@ -716,7 +708,36 @@ def main():
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 cv2.imshow(f'Color-{i}', img)
                 depth = depthSHW[..., i, :, :, 0]
-                cv2.imshow(f'Depth-{i}', depth)
+
+                # 为了显示，将深度值归一化到 0-255 范围
+                # 首先，将无效深度值（例如0）屏蔽掉，以避免影响归一化
+                # 假设无效的深度值为0
+                clipped_depth = np.where(depth == 0, 0, depth)
+
+                # 计算有效深度的最小值和最大值（忽略0）
+                min_val = np.min(clipped_depth[np.nonzero(clipped_depth)])
+                max_val = np.max(clipped_depth)
+
+                # 对比度拉伸：将 [min_val, max_val] 映射到 [0, 255]
+                depth_normalized = np.zeros_like(clipped_depth, dtype=np.uint8)
+                if max_val > min_val:
+                    depth_normalized = cv2.convertScaleAbs(depth, alpha=255.0 / (max_val - min_val), beta=-min_val * 255.0 / (max_val - min_val))
+                else:
+                    # 如果图像全黑或无效，避免除以零
+                    depth_normalized = np.zeros_like(depth_image, dtype=np.uint8)
+
+                # 应用色彩映射（JET是常用的，但PARULA和VIRIDIS视觉效果更好）
+                depth_colormap = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
+                # depth_colormap = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_VIRIDIS)
+                # depth_colormap = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_PARULA)
+
+                # 显示原深度图（灰度）和伪彩色图
+                # 原深度图需要先归一化才能用imshow正确显示
+                #cv2.imshow('Original Depth (Normalized)', depth_normalized)
+                #cv2.imshow('Depth Colormap', depth_colormap)
+
+                #cv2.imshow(f'Depth-{i}', depth)
+                cv2.imshow(f'Depth-Colormap-{i}', depth_colormap)
                 end_time = time.time()
                 #if end_time - start_time > 10:
                     #cv2.imwrite(os.path.join('tmp', f'rgb_{i}_{end_time}.jpg'), img*255)
@@ -726,6 +747,9 @@ def main():
             #cv2.imshow('Depth-2', depthSHW[..., 2, :, :, 0])
 
             key = cv2.waitKey(1)
+            if key == ord('v'):
+                print('Start Recording')
+                start_record = True
             if key == ord('q') or key == ESC_KEY:
                 stop_rendering = True
                 if args.save_data:
@@ -733,7 +757,7 @@ def main():
                     #utils.save_images(images_buf)
                     #utils.save_depth(depth_buf)
                     #for d in saved_data:
-                    utils.save_data(os.path.join(args.save_path, f'frames_%04d.pkl' % index), saved_data)
+                    utils.save_data(os.path.join(args.save_path, f'frames_0922_%04d.pkl' % index), saved_data)
                 break
         #cv2.destroyAllWindows()
 
@@ -745,4 +769,23 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if True:
+        main()
+
+    if False:
+        from utils import load_data
+        from pprint import pprint
+        data_path = 'D:\\Code\\vggt\\saved\\frames_0922_0179.pkl'
+        data = load_data(data_path=data_path)
+        for d in data:
+            print(d.keys())
+            print(d['index'], d['time'], d['images'].shape, d['depth'].shape, d['points'].shape, d['colors'].shape)
+        d = data[0]
+        for i in range(MAX_DEVICES):
+            img = d['images'][i, :, :, 0:3]
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            cv2.imshow(f'Color-{i}', img)
+            depth = d['depth'][i, :, :, 0]
+            cv2.imshow(f'Depth-{i}', depth)
+            cv2.waitKey(0)
+
