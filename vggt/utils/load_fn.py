@@ -178,12 +178,12 @@ def load_and_preprocess_images(image_path_list, mode="crop"):
             new_height = round(height * (new_width / width) / unit_sz) * unit_sz
 
         # Resize with new dimensions (width, height)
-        if False:
+        if True:
             img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
             img = to_tensor(img)  # Convert to tensor (0, 1)
 
         # center-cropped the image no resize
-        if True:
+        if False:
             w1, h1 = int(width//2), int(height//2)
             img = img.resize((w1, h1), Image.Resampling.BICUBIC)
             #img = to_tensor(img)  # Convert to tensor (0, 1)
