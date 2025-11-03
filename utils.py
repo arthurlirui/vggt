@@ -14,7 +14,7 @@
 #  limitations under the License.
 # ******************************************************************************
 from typing import Union, Any, Optional
-
+import open3d as o3d
 import cv2
 import numpy as np
 import pickle
@@ -153,6 +153,7 @@ def load_data(data_path=''):
         #print(loaded_data)
     return loaded_data
 
+
 def init_data_dict():
     data_dict = {
         'images': None,
@@ -165,3 +166,46 @@ def init_data_dict():
         'index': None
         }
     return data_dict
+
+
+def get_current_view_parameters(vis):
+    """
+    获取当前视角的相机参数
+    """
+    ctr = vis.get_view_control()
+    param = ctr.convert_to_pinhole_camera_parameters()
+
+    # 提取有用的信息
+    intrinsic = param.intrinsic
+    extrinsic = param.extrinsic
+
+    print("相机内参:")
+    print(f"图像尺寸: {intrinsic.width} x {intrinsic.height}")
+    print(f"焦距: {intrinsic.get_focal_length()}")
+    print(f"主点: {intrinsic.get_principal_point()}")
+
+    return param
+
+
+# 使用示例
+def analyze_view_parameters(pcd):
+    vis = o3d.visualization.Visualizer()
+    vis.create_window()
+    vis.add_geometry(pcd)
+
+    # 设置一个视角
+    ctr = vis.get_view_control()
+    ctr.set_lookat([0, 0, 0])
+    ctr.set_front([0, 0, -1])
+    ctr.set_up([0, 1, 0])
+
+    # 获取相机参数
+    param = get_current_view_parameters(vis)
+
+    vis.run()
+    vis.destroy_window()
+    return param
+
+
+#pcd = o3d.io.read_point_cloud("your_pointcloud.ply")
+#camera_params = analyze_view_parameters(pcd)

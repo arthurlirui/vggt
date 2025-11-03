@@ -22,8 +22,6 @@ import viser
 import viser.transforms as viser_tf
 import cv2
 import open3d as o3d
-import cupy as cp
-from numba import cuda
 from pprint import pprint
 import ba.buddle_adjustment as BA
 from utils import init_data_dict, load_data
@@ -524,11 +522,10 @@ def main():
     parser.add_argument("--use_point_map", action="store_true", help="Use point map instead of depth-based points")
     parser.add_argument("--background_mode", action="store_true", help="Run the viser server in background mode")
     parser.add_argument("--port", type=int, default=8080, help="Port number for the viser server")
-    parser.add_argument("--conf_threshold", type=float, default=1.1, help="Initial percentage of low-confidence points to filter out")
+    parser.add_argument("--conf_threshold", type=float, default=25.0, help="Initial percentage of low-confidence points to filter out")
     parser.add_argument("--mask_sky", action="store_true", help="Apply sky segmentation to filter out sky points")
     parser.add_argument("--save_data", action="store_true", help="save images, point cloud and depth")
     parser.add_argument("--save_path", type=str, default="D:\\Code\\vggt\\saved", help="save path data")
-    parser.add_argument("--use_GPU_render", action="store_true", help="Use GPU to render point clouds")
 
     """
         Main function for the VGGT demo with viser for 3D visualization.
@@ -549,7 +546,7 @@ def main():
         --mask_sky: Apply sky segmentation to filter out sky points
     """
     args = parser.parse_args()
-    pprint(args)
+    print(args)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
@@ -617,7 +614,7 @@ def main():
     global stop_rendering, start_record
     start_streams(pipelines, configs)
 
-
+    start_time = time.time()
     index = 0
     try:
         #rendering_frames()
@@ -635,10 +632,7 @@ def main():
             dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
             with torch.no_grad():
                 with torch.cuda.amp.autocast(dtype=dtype):
-                    start_time = time.time()
                     predictions = model(images)
-                    end_time = time.time()
-            print(f"Computing Time:{end_time-start_time}")
             print("Converting pose encoding to extrinsic and intrinsic matrices...")
             extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
             predictions["extrinsic"] = extrinsic
@@ -655,19 +649,10 @@ def main():
             #continue
 
             print("Processing model outputs...")
-            start_time = time.time()
-            if args.use_GPU_render:
-                for key in predictions.keys():
-                    if isinstance(predictions[key], torch.Tensor):
-                        # remove batch dimension and convert to pycuda numpy
-                        predictions[key] = cp.asarray(predictions[key]).squeeze(0)
-            else:
-                for key in predictions.keys():
-                    if isinstance(predictions[key], torch.Tensor):
-                        # remove batch dimension and convert to numpy
-                        predictions[key] = predictions[key].cpu().numpy().squeeze(0)
-            end_time = time.time()
-            print(f"CPU-GPU-Communication Time:{end_time-start_time}")
+            for key in predictions.keys():
+                if isinstance(predictions[key], torch.Tensor):
+                    # remove batch dimension and convert to numpy
+                    predictions[key] = predictions[key].cpu().numpy().squeeze(0)
 
             ptSHW = predictions['world_points']
             colorSHW = predictions['images']
@@ -684,13 +669,9 @@ def main():
             confN3 = confSHW.reshape(-1, )
 
             # Convert numpy arrays to correct types
-            mask = confN3 > args.conf_threshold
-            if args.use_GPU_render:
-                points = cp.asnumpy(ptN3[mask, :])
-                colors = cp.asnumpy(colorN3[mask, :])
-            else:
-                points = np.asarray(ptN3[mask, :], dtype=np.float64)
-                colors = np.asarray(colorN3[mask, :], dtype=np.float64)
+            mask = confN3 > 1.3
+            points = np.asarray(ptN3[mask, :], dtype=np.float64)
+            colors = np.asarray(colorN3[mask, :], dtype=np.float64)
 
             if args.save_data and start_record:
                 data_dict['colors'] = colors
@@ -708,7 +689,7 @@ def main():
             pcd.points = o3d.utility.Vector3dVector(points)
             pcd.colors = o3d.utility.Vector3dVector(colors)
             print(pcd)
-            start_time = time.time()
+
             if not is_initialized:
                 vis.add_geometry(pcd)
                 is_initialized = True
@@ -718,10 +699,8 @@ def main():
             #vis.add_geometry(pcd, reset_bounding_box=False)
             vis.poll_events()
             vis.update_renderer()
-            end_time = time.time()
             time.sleep(0.001)
             #vis.remove_geometry(pcd, reset_bounding_box=False)
-            print(f"Rendering Time:{end_time-start_time}")
 
             if args.save_data and start_record:
                 data_dict['images'] = colorSHW
@@ -734,10 +713,7 @@ def main():
 
             index += 1
 
-
             for i in range(MAX_DEVICES):
-                if args.use_GPU_render:
-                    continue
                 img = colorSHW[..., i, :, :, 0:3]
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 cv2.imshow(f'Color-{i}', img)
@@ -800,6 +776,7 @@ def main():
     finally:
         stop_streams(pipelines)
         cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     if True:

@@ -86,7 +86,7 @@ def main_dataset():
 
     # start open3d windows
     vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name='3D Scene - RGB', visible=True, width=518, height=920, top=100, left=100)
+    vis.create_window(window_name='3D Scene - RGB', visible=True, width=640, height=640, top=100, left=100)
     pcd = o3d.geometry.PointCloud()
     is_initialized = False
 
@@ -95,6 +95,9 @@ def main_dataset():
     #data_path = 'Y:\\datasets\\1204\\people'
     calib_path = 'D:\\Data\\ob\\1204\\rotated_data'
     data_path = 'D:\\Data\\ob\\1204\\rotated_data'
+    #'D:\Data\ob\1219\rotated_data'
+    #calib_path = 'D:\\Data\\ob\\1219\\rotated_data'
+    #data_path = 'D:\\Data\\ob\\1219\\rotated_data'
     dataset = Dataset(calib_path=calib_path, data_path=data_path)
 
     device_list = list(dataset.data.keys())
@@ -102,102 +105,106 @@ def main_dataset():
     print(sorted(ind_list))
     skeys = sorted(device_list)
 
-    index = ind_list[42]
+    #index = ind_list[42]
+    #i = index
 
-    #for i in ind_list:
-    #index = i
-    i = index
-    rgbs, depths = {}, {}
-    for ii in range(30):
-        rgb0 = dataset.get_frames_by_index(i + ii - 15, dict_name='rgb_dict')
-        depth0 = dataset.get_frames_by_index(i + ii - 15, dict_name='depth_dict')
-        rgbs = {**rgbs, **rgb0}
-        depths = {**depths, **depth0}
-        #if len(rgbs) == len(device_list) and len(depths) == len(device_list):
-        if len(rgbs) == len(device_list):
-            break
-    #if len(rgbs) != len(device_list) or len(depths) != len(device_list) or len(rgbs) != len(depths):
-    #    print("No enough images")
-    #    return
+    for ind in ind_list:
+        index = ind
+        rgbs, depths = {}, {}
+        for ii in range(30):
+            rgb0 = dataset.get_frames_by_index(ind + ii - 15, dict_name='rgb_dict')
+            depth0 = dataset.get_frames_by_index(ind + ii - 15, dict_name='depth_dict')
+            rgbs = {**rgbs, **rgb0}
+            depths = {**depths, **depth0}
+            #if len(rgbs) == len(device_list) and len(depths) == len(device_list):
+            if len(rgbs) == len(device_list):
+                break
+        if len(rgbs) != len(device_list):
+            print(f"No enough images - {ind}")
+            continue
 
-    print(i, len(rgbs), len(depths), len(device_list))
-    data_dict = init_data_dict()
-    pprint(rgbs)
-    images = [rgbs[k] for k in skeys]
-    images = load_and_preprocess_images(image_path_list=images, mode="crop")
-    images = images.to(device)
-    print(f"Running inference: preprocessed images shape: {images.shape}")
-    dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
-    with torch.no_grad():
-        with torch.cuda.amp.autocast(dtype=dtype):
-            predictions = model(images)
-    print("Converting pose encoding to extrinsic and intrinsic matrices...")
-    extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
-    predictions["extrinsic"] = extrinsic
-    predictions["intrinsic"] = intrinsic
+        print(ind, len(rgbs), len(depths), len(device_list))
+        data_dict = init_data_dict()
+        pprint(rgbs)
+        images = [rgbs[k] for k in skeys]
+        images = load_and_preprocess_images(image_path_list=images, mode="crop")
+        images = images.to(device)
+        print(f"Running inference: preprocessed images shape: {images.shape}")
+        dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(dtype=dtype):
+                predictions = model(images)
+        print("Converting pose encoding to extrinsic and intrinsic matrices...")
+        extrinsic, intrinsic = pose_encoding_to_extri_intri(predictions["pose_enc"], images.shape[-2:])
+        predictions["extrinsic"] = extrinsic
+        predictions["intrinsic"] = intrinsic
 
-    print("Processing model outputs...")
-    for key in predictions.keys():
-        if isinstance(predictions[key], torch.Tensor):
-            # remove batch dimension and convert to numpy
-            predictions[key] = predictions[key].cpu().numpy().squeeze(0)
+        print("Processing model outputs...")
+        for key in predictions.keys():
+            if isinstance(predictions[key], torch.Tensor):
+                # remove batch dimension and convert to numpy
+                predictions[key] = predictions[key].cpu().numpy().squeeze(0)
 
-    ptSHW = predictions['world_points']
-    colorSHW = predictions['images']
-    depthSHW = predictions['depth']
-    colorSHW = colorSHW.transpose(0, 2, 3, 1)
-    ConfSHW = predictions['world_points_conf']
+        ptSHW = predictions['world_points']
+        colorSHW = predictions['images']
+        depthSHW = predictions['depth']
+        colorSHW = colorSHW.transpose(0, 2, 3, 1)
+        ConfSHW = predictions['world_points_conf']
 
-    #colorSHW = colorSHW[..., ::-1]
-    print('Point cloud shape:', ptSHW.shape)
-    print('Color shape:', colorSHW.shape)
-    print('Depth shape:', depthSHW.shape)
-    print('Conf shape:', ConfSHW.shape)
+        #colorSHW = colorSHW[..., ::-1]
+        print('Point cloud shape:', ptSHW.shape)
+        print('Color shape:', colorSHW.shape)
+        print('Depth shape:', depthSHW.shape)
+        print('Conf shape:', ConfSHW.shape)
 
-    # Convert numpy arrays to correct types
-    ptN3 = ptSHW.reshape(-1, 3)
-    colorN3 = colorSHW.reshape(-1, 3)
-    confN3 = ConfSHW.reshape(-1, )
-    points = np.asarray(ptN3[confN3 > 1.1, :], dtype=np.float64)
-    colors = np.asarray(colorN3[confN3 > 1.1, :], dtype=np.float64)
-    data_dict['colors'] = colors
-    data_dict['points'] = points
+        # Convert numpy arrays to correct types
+        ptN3 = ptSHW.reshape(-1, 3)
+        colorN3 = colorSHW.reshape(-1, 3)
+        confN3 = ConfSHW.reshape(-1, )
+        points = np.asarray(ptN3[confN3 > 1.05, :], dtype=np.float64)
+        colors = np.asarray(colorN3[confN3 > 1.05, :], dtype=np.float64)
+        data_dict['colors'] = colors
+        data_dict['points'] = points
 
-    # Validate input shapes
-    if points.shape[1] != 3:
-        raise ValueError("Points must be an Nx3 array")
-    if colors.shape[1] != 3:
-        raise ValueError("Colors must be an Nx3 array")
-    if points.shape[0] != colors.shape[0]:
-        raise ValueError("Points and colors must have the same number of points")
+        # Validate input shapes
+        if points.shape[1] != 3:
+            raise ValueError("Points must be an Nx3 array")
+        if colors.shape[1] != 3:
+            raise ValueError("Colors must be an Nx3 array")
+        if points.shape[0] != colors.shape[0]:
+            raise ValueError("Points and colors must have the same number of points")
 
-    # Assign points and colors to the point cloud
-    pcd.points = o3d.utility.Vector3dVector(points)
-    pcd.colors = o3d.utility.Vector3dVector(colors)
-    print(pcd)
+        # Assign points and colors to the point cloud
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        print(pcd)
 
-    if not is_initialized:
-        vis.add_geometry(pcd)
-        is_initialized = True
-    else:
-        vis.update_geometry(pcd)
+        if not is_initialized:
+            vis.add_geometry(pcd)
+            is_initialized = True
+            # 获取渲染选项并设置点大小
+            point_size = 1.0
+            render_option = vis.get_render_option()
+            render_option.point_size = point_size
+            render_option.background_color = np.array([1, 1, 1])  # 白色背景
+        else:
+            vis.update_geometry(pcd)
 
-    # vis.add_geometry(pcd, reset_bounding_box=False)
-    vis.poll_events()
-    vis.update_renderer()
-    time.sleep(0.001)
+        # vis.add_geometry(pcd, reset_bounding_box=False)
+        vis.poll_events()
+        vis.update_renderer()
+        #time.sleep(0.001)
 
-    # vis.remove_geometry(pcd, reset_bounding_box=False)
-    #cv2.waitKey()
-    if False:
-        data_dict['images'] = colorSHW
-        data_dict['depth'] = depthSHW
-        data_dict['time'] = time.time()
-        data_dict['index'] = index
-        data_dict['intrinsic'] = intrinsic
-        data_dict['extrinsic'] = extrinsic
+        # vis.remove_geometry(pcd, reset_bounding_box=False)
+        #cv2.waitKey()
+        if False:
+            data_dict['images'] = colorSHW
+            data_dict['depth'] = depthSHW
+            data_dict['time'] = time.time()
+            data_dict['index'] = index
+            data_dict['intrinsic'] = intrinsic
+            data_dict['extrinsic'] = extrinsic
 
-    if True:
         for i in range(len(images[0:5])):
             img = colorSHW[..., i, :, :, 0:3]
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -235,9 +242,13 @@ def main_dataset():
             conf_colormap = cv2.applyColorMap(conf_normalized, cv2.COLORMAP_JET)
             # cv2.imshow(f'Depth-{i}', depth)
             cv2.imshow(f'Conf-Colormap-{i}', conf_colormap)
-
             end_time = time.time()
-        vis.capture_screen_image("screenshot.png")
+        if args.save_data:
+            ts = time.strftime('%Y_%m_%d_%H_%M_%S', time.localtime())
+            save_path = os.path.join(args.save_path, ts)
+            if not os.path.exists(save_path):
+                os.mkdir(save_path)
+            vis.capture_screen_image(os.path.join(save_path, {ind}.png))
         vis.run()
 
 
