@@ -38,6 +38,10 @@ from vggt.models.vggt import VGGT
 from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.geometry import closed_form_inverse_se3, unproject_depth_map_to_point_map
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
+from models.depthanythingv2_DC import depthanythingv2_DC
+
+img_mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+img_std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
 
 def main():
@@ -45,7 +49,7 @@ def main():
     device_list = ctx.query_devices()
     curr_device_cnt = device_list.get_count()
     #for i in range(device_list.get_count()):
-    camera_index = 4
+    camera_index = 1
     camera = device_list.get_device_by_index(camera_index)
     pipeline = Pipeline(camera)
     # 1.Create a pipeline with default device.
@@ -53,14 +57,20 @@ def main():
     # 2.Create config.
     config = Config()
 
+    model = depthanythingv2_DC(encoder='vits').cuda()
+    checkpoint = torch.load("models/best_rmse_model.pt")
+    results = model.load_state_dict(checkpoint['net'], strict=True)
+    print('Missing keys: {}'.format(results.missing_keys))
+    print('Unexpected keys: {}'.format(results.unexpected_keys))
+
     # 3.Enable color profile
     profile_list = pipeline.get_stream_profile_list(OBSensorType.COLOR_SENSOR)
-    color_profile = profile_list.get_video_stream_profile(0, 0, OBFormat.RGB, 0)
+    color_profile = profile_list.get_video_stream_profile(0, 0, OBFormat.RGB, 30)
     config.enable_stream(color_profile)
 
     # 4.Enable depth profile
     profile_list = pipeline.get_stream_profile_list(OBSensorType.DEPTH_SENSOR)
-    depth_profile = profile_list.get_video_stream_profile(0, 0, OBFormat.Y16, 0)
+    depth_profile = profile_list.get_video_stream_profile(0, 0, OBFormat.Y16, 30)
     config.enable_stream(depth_profile)
 
     # 5.Set the frame aggregate output mode to ensure all types of frames are included in the output frameset
@@ -114,8 +124,42 @@ def main():
 
         depth_image = depth_data.astype(np.float32) * scale
         # image_dict['depth'] = depth_data
-        color_image = cv2.resize(color_image, dsize=(640, 360))
-        depth_image = cv2.resize(depth_image, dsize=(640, 360))
+        #color_image = cv2.resize(color_image, dsize=(504, 378))
+        #depth_image = cv2.resize(depth_image, dsize=(504, 378))
+        color_image = cv2.resize(color_image, dsize=(1280, 720))
+        depth_image = cv2.resize(depth_image, dsize=(1280, 720))
+        color_image = color_image[360 - 189:360 + 189, 640 - 252:640 + 252, :]
+        depth_image = depth_image[360 - 189:360 + 189, 640 - 252:640 + 252]
+        print(color_image.shape, depth_image.shape)
+
+        color_image_temp = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
+        color_image_temp = color_image_temp.astype(np.float32) / 255.0
+        color_tensor = torch.from_numpy(color_image_temp).permute(2, 0, 1)
+        color_tensor = (color_tensor - img_mean) / img_std
+
+        depth_image_temp = depth_image.astype(np.float32)
+        depth_tensor = torch.from_numpy(depth_image_temp).unsqueeze(0).unsqueeze(0)
+
+        # print("image shape: ", color_tensor.shape)
+        # print("depth shape: ", depth_tensor.shape)
+        # print("depth_range:", depth_tensor.max(), depth_tensor.min())
+
+        depth_tensor = depth_tensor / 1000 / 10 * 6
+
+        color_tensor = color_tensor.cuda()
+        depth_tensor = depth_tensor.cuda()
+
+        output = model(color_tensor, depth_tensor)
+
+        depth_output = output['depth_list'][-1]
+        #depth_output = output['mona_depth']
+        #
+        #depth_output = (depth_output - depth_output.min()) / (depth_output.max() - depth_output.min())
+
+        depth_output = depth_output * 10 * 1000 / 6
+
+        depth_image = depth_output.squeeze().detach().cpu().numpy().astype(np.float32)
+
 
         min_val, max_val = 0, 10000
 

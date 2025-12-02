@@ -16,7 +16,7 @@ import GPUtil
 
 
 class PointCloudStreamRenderer:
-    def __init__(self, width=1280, height=720, max_points=5000000):
+    def __init__(self, width=1920, height=1080, max_points=5000000):
         self.width = width
         self.height = height
         self.max_points = max_points
@@ -36,6 +36,10 @@ class PointCloudStreamRenderer:
         # Animation
         self.start_time = time.time()
         self.frame_count = 0
+
+        # CPU buffers for data transfer
+        self.cpu_positions = np.zeros((max_points, 3), dtype=np.float32)
+        self.cpu_colors = np.zeros((max_points, 3), dtype=np.float32)
 
         # Initialize systems
         self.setup_glfw()
@@ -181,29 +185,26 @@ class PointCloudStreamRenderer:
             }
         }
 
-        // Kernel for point cloud transformation
-        __global__ void transform_point_cloud_kernel(
-            float3* positions,
-            int point_count,
-            float3 translation,
-            float3 rotation,
-            float scale
+        // Kernel to copy data to CPU buffer for OpenGL
+        __global__ void copy_to_cpu_kernel(
+            float3* device_positions,
+            float3* device_colors,
+            float* cpu_positions,  // Flattened array
+            float* cpu_colors,     // Flattened array
+            int point_count
         ) {
             int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
             if (idx < point_count) {
-                float3 pos = positions[idx];
+                // Copy positions (convert float3 to flattened float array)
+                cpu_positions[idx * 3 + 0] = device_positions[idx].x;
+                cpu_positions[idx * 3 + 1] = device_positions[idx].y;
+                cpu_positions[idx * 3 + 2] = device_positions[idx].z;
 
-                // Apply rotation (simplified)
-                float3 rotated;
-                rotated.x = pos.x * cosf(rotation.y) - pos.z * sinf(rotation.y);
-                rotated.z = pos.x * sinf(rotation.y) + pos.z * cosf(rotation.y);
-                rotated.y = pos.y;
-
-                // Apply scale and translation
-                positions[idx].x = rotated.x * scale + translation.x;
-                positions[idx].y = rotated.y * scale + translation.y;
-                positions[idx].z = rotated.z * scale + translation.z;
+                // Copy colors (convert float3 to flattened float array)
+                cpu_colors[idx * 3 + 0] = device_colors[idx].x;
+                cpu_colors[idx * 3 + 1] = device_colors[idx].y;
+                cpu_colors[idx * 3 + 2] = device_colors[idx].z;
             }
         }
         """
@@ -212,7 +213,7 @@ class PointCloudStreamRenderer:
         self.update_kernel = self.mod.get_function("update_points_kernel")
         self.animate_kernel = self.mod.get_function("animate_points_kernel")
         self.remove_kernel = self.mod.get_function("remove_old_points_kernel")
-        self.transform_kernel = self.mod.get_function("transform_point_cloud_kernel")
+        self.copy_to_cpu_kernel = self.mod.get_function("copy_to_cpu_kernel")
 
     def setup_buffers(self):
         """Setup CUDA and OpenGL buffers"""
@@ -221,22 +222,23 @@ class PointCloudStreamRenderer:
         self.d_colors = cuda.mem_alloc(self.max_points * 12)
         self.d_point_count = cuda.mem_alloc(4)  # int
 
+        # CPU buffers for OpenGL data transfer
+        self.d_cpu_positions = cuda.mem_alloc(self.max_points * 12)  # For GPU->CPU transfer
+        self.d_cpu_colors = cuda.mem_alloc(self.max_points * 12)  # For GPU->CPU transfer
+
         # Initialize with zeros
         cuda.memset_d32(self.d_positions, 0, self.max_points * 3)
         cuda.memset_d32(self.d_colors, 0, self.max_points * 3)
+        cuda.memset_d32(self.d_cpu_positions, 0, self.max_points * 3)
+        cuda.memset_d32(self.d_cpu_colors, 0, self.max_points * 3)
 
         # Initialize point count
         zero_count = np.array([0], dtype=np.int32)
         cuda.memcpy_htod(self.d_point_count, zero_count)
 
-        # OpenGL buffers
+        # OpenGL buffers - using dynamic draw since we update frequently
         self.vbo_positions = self.ctx.buffer(reserve=self.max_points * 12)
         self.vbo_colors = self.ctx.buffer(reserve=self.max_points * 12)
-
-        # Register OpenGL buffers with CUDA for zero-copy
-        #self.cuda_vbo_positions = cuda.RegisteredBuffer(self.vbo_positions.glo)
-        #self.cuda_vbo_positions = pycuda.gl.RegisteredBuffer(self.vbo_positions.glo)
-        #self.cuda_vbo_colors = pycuda.gl.RegisteredBuffer(self.vbo_colors.glo)
 
     def setup_shaders(self):
         """Setup ModernGL shaders for point cloud rendering"""
@@ -339,8 +341,12 @@ class PointCloudStreamRenderer:
 
     def initialize_empty_point_cloud(self):
         """Initialize with an empty point cloud"""
-        # Already initialized in setup_buffers
-        pass
+        # Update OpenGL buffers with initial empty data
+        empty_positions = np.zeros((self.max_points, 3), dtype=np.float32)
+        empty_colors = np.zeros((self.max_points, 3), dtype=np.float32)
+
+        self.vbo_positions.write(empty_positions.tobytes())
+        self.vbo_colors.write(empty_colors.tobytes())
 
     def add_point_cloud_chunk(self, positions, colors):
         """Add a chunk of points to the stream"""
@@ -516,6 +522,11 @@ class PointCloudStreamRenderer:
         # Process incoming stream data
         new_points = self.process_stream_queue()
 
+        # Update point count from GPU
+        count_array = np.zeros(1, dtype=np.int32)
+        cuda.memcpy_dtoh(count_array, self.d_point_count)
+        self.current_point_count = count_array[0]
+
         # Animate existing points
         self.animate_points(delta_time)
 
@@ -632,9 +643,11 @@ class PointCloudStreamRenderer:
             elif key == glfw.KEY_C:
                 # Clear point cloud
                 self.initialize_empty_point_cloud()
+                # Reset point count on GPU
+                zero_count = np.array([0], dtype=np.int32)
+                cuda.memcpy_htod(self.d_point_count, zero_count)
             elif key == glfw.KEY_ESCAPE:
                 glfw.set_window_should_close(window, True)
-
 
 class PointCloudStreamGenerator:
     def __init__(self, renderer, points_per_chunk=10000, stream_rate=30):

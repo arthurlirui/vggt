@@ -686,8 +686,8 @@ def main():
             # Convert numpy arrays to correct types
             mask = confN3 > args.conf_threshold
             if args.use_GPU_render:
-                points = cp.asnumpy(ptN3[mask, :])
-                colors = cp.asnumpy(colorN3[mask, :])
+                points = cp.asarray(ptN3[mask, :])
+                colors = cp.asarray(colorN3[mask, :])
             else:
                 points = np.asarray(ptN3[mask, :], dtype=np.float64)
                 colors = np.asarray(colorN3[mask, :], dtype=np.float64)
@@ -733,7 +733,6 @@ def main():
                 saved_data.append(data_dict)
 
             index += 1
-
 
             for i in range(MAX_DEVICES):
                 if args.use_GPU_render:
