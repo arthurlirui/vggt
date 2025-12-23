@@ -554,7 +554,13 @@ def main():
     print(f"Using device: {device}")
 
     print("Initializing and loading VGGT model...")
-    model = VGGT.from_pretrained("facebook/VGGT-1B")
+    if False:
+        model = VGGT.from_pretrained("facebook/VGGT-1B")
+    else:
+        model = VGGT()
+        #_URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
+        state_dict = torch.load("model.pt")
+        model.load_state_dict(state_dict)
 
     if False:
         model = VGGT()
@@ -610,7 +616,7 @@ def main():
 
     # start open3d windows
     vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name='3D Scene - RGB', height=1440, width=2800, top=0, left=0)
+    vis.create_window(window_name='3D Scene - RGB', height=1080, width=1080, top=0, left=0)
     pcd = o3d.geometry.PointCloud()
     is_initialized = False
 
