@@ -39,6 +39,7 @@ from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.geometry import closed_form_inverse_se3, unproject_depth_map_to_point_map
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 from models.depthanythingv2_DC import depthanythingv2_DC
+from models.VGGT_DC import VGGT_DC
 
 img_mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 img_std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
@@ -58,6 +59,7 @@ def main():
     config = Config()
 
     model = depthanythingv2_DC(encoder='vits').cuda()
+    # model = VGGT_DC().cuda()
     checkpoint = torch.load("models/best_rmse_model.pt")
     results = model.load_state_dict(checkpoint['net'], strict=True)
     print('Missing keys: {}'.format(results.missing_keys))
@@ -135,7 +137,10 @@ def main():
         color_image_temp = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
         color_image_temp = color_image_temp.astype(np.float32) / 255.0
         color_tensor = torch.from_numpy(color_image_temp).permute(2, 0, 1)
-        color_tensor = (color_tensor - img_mean) / img_std
+        color_tensor = color_tensor.unsqueeze(0)
+        # color_tensor = (color_tensor - img_mean) / img_std
+
+        print(color_tensor.shape)
 
         depth_image_temp = depth_image.astype(np.float32)
         depth_tensor = torch.from_numpy(depth_image_temp).unsqueeze(0).unsqueeze(0)
@@ -152,9 +157,9 @@ def main():
         output = model(color_tensor, depth_tensor)
 
         depth_output = output['depth_list'][-1]
-        #depth_output = output['mona_depth']
+        # depth_output = output['mona_depth']
         #
-        #depth_output = (depth_output - depth_output.min()) / (depth_output.max() - depth_output.min())
+        # depth_output = (depth_output - depth_output.min()) / (depth_output.max() - depth_output.min())
 
         depth_output = depth_output * 10 * 1000 / 6
 

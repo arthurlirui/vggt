@@ -39,7 +39,7 @@ from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.geometry import closed_form_inverse_se3, unproject_depth_map_to_point_map
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
-MAX_DEVICES = 5
+MAX_DEVICES = 4
 curr_device_cnt = 0
 
 MAX_QUEUE_SIZE = 6
@@ -616,7 +616,7 @@ def main():
 
     # start open3d windows
     vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name='3D Scene - RGB', height=1080, width=1080, top=0, left=0)
+    vis.create_window(window_name='3D Scene - RGB', height=1080, width=1080, top=200, left=200)
     pcd = o3d.geometry.PointCloud()
     is_initialized = False
 
@@ -805,6 +805,7 @@ def main():
     finally:
         stop_streams(pipelines)
         cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     if True:
