@@ -615,10 +615,28 @@ def main():
         configs.append(config)
 
     # start open3d windows
+    # 获取屏幕尺寸
+    try:
+        import tkinter as tk
+        root = tk.Tk()
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        root.destroy()
+    except:
+        screen_width = 1920
+        screen_height = 1080
+    
+    # Open3D窗口占据屏幕左半部分
+    open3d_width = screen_width // 2
+    open3d_height = screen_height
+    
     vis = o3d.visualization.Visualizer()
-    vis.create_window(window_name='3D Scene - RGB', height=1080, width=1080, top=200, left=200)
+    vis.create_window(window_name='3D Scene - RGB', height=open3d_height, width=open3d_width, top=50, left=50)
     pcd = o3d.geometry.PointCloud()
     is_initialized = False
+    
+    # 创建坐标轴用于显示
+    coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0, 0, 0])
 
     global stop_rendering, start_record
     start_streams(pipelines, configs)
@@ -713,10 +731,17 @@ def main():
             # Assign points and colors to the point cloud
             pcd.points = o3d.utility.Vector3dVector(points)
             pcd.colors = o3d.utility.Vector3dVector(colors)
-            print(pcd)
+            
+            # 获取点云数量
+            num_points = len(points)
+            
+            # 打印帧信息
+            print(f"Frame: {index} | Points: {num_points:,}")
+            
             start_time = time.time()
             if not is_initialized:
                 vis.add_geometry(pcd)
+                vis.add_geometry(coord_frame)
                 is_initialized = True
             else:
                 vis.update_geometry(pcd)
@@ -740,46 +765,72 @@ def main():
 
             index += 1
 
-            for i in range(MAX_DEVICES):
-                if args.use_GPU_render:
-                    continue
-                img = colorSHW[..., i, :, :, 0:3]
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                cv2.imshow(f'Color-{i}', img)
-                depth = depthSHW[..., i, :, :, 0]
-
-                # 为了显示，将深度值归一化到 0-255 范围
-                # 首先，将无效深度值（例如0）屏蔽掉，以避免影响归一化
-                # 假设无效的深度值为0
-                clipped_depth = np.where(depth == 0, 0, depth)
-
-                # 计算有效深度的最小值和最大值（忽略0）
-                min_val = np.min(clipped_depth[np.nonzero(clipped_depth)])
-                max_val = np.max(clipped_depth)
-
-                # 对比度拉伸：将 [min_val, max_val] 映射到 [0, 255]
-                depth_normalized = np.zeros_like(clipped_depth, dtype=np.uint8)
-                if max_val > min_val:
-                    depth_normalized = cv2.convertScaleAbs(depth, alpha=255.0 / (max_val - min_val), beta=-min_val * 255.0 / (max_val - min_val))
-                else:
-                    # 如果图像全黑或无效，避免除以零
-                    depth_normalized = np.zeros_like(depth_image, dtype=np.uint8)
-
-                # 应用色彩映射（JET是常用的，但PARULA和VIRIDIS视觉效果更好）
-                depth_colormap = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
-                # depth_colormap = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_VIRIDIS)
-                # depth_colormap = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_PARULA)
-
-                # 显示原深度图（灰度）和伪彩色图
-                # 原深度图需要先归一化才能用imshow正确显示
-                #cv2.imshow('Original Depth (Normalized)', depth_normalized)
-                #cv2.imshow('Depth Colormap', depth_colormap)
-
-                #cv2.imshow(f'Depth-{i}', depth)
-                cv2.imshow(f'Depth-Colormap-{i}', depth_colormap)
+            if not args.use_GPU_render:
+                # 获取实际设备数量
+                num_devices = min(curr_device_cnt, colorSHW.shape[0])
+                
+                # 准备每行的图像对（RGB和深度图）
+                rows = []
+                for i in range(num_devices):
+                    # 获取RGB图像
+                    img_rgb = colorSHW[i, :, :, :]
+                    if img_rgb.dtype != np.uint8:
+                        img_rgb = (img_rgb * 255).astype(np.uint8)
+                    img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2RGB)
+                    
+                    # 获取深度图
+                    depth = depthSHW[i, :, :, 0]
+                    
+                    # 深度图归一化处理
+                    clipped_depth = np.where(depth == 0, 0, depth)
+                    valid_mask = clipped_depth > 0
+                    
+                    depth_normalized = np.zeros_like(depth, dtype=np.uint8)
+                    if np.any(valid_mask):
+                        min_val = np.min(clipped_depth[valid_mask])
+                        max_val = np.max(clipped_depth[valid_mask])
+                        if max_val > min_val:
+                            depth_normalized = cv2.convertScaleAbs(
+                                depth, 
+                                alpha=255.0 / (max_val - min_val), 
+                                beta=-min_val * 255.0 / (max_val - min_val)
+                            )
+                    
+                    # 应用色彩映射
+                    depth_colormap = cv2.applyColorMap(depth_normalized, cv2.COLORMAP_JET)
+                    
+                    # 水平拼接RGB和深度图
+                    row = np.hstack([img_rgb, depth_colormap])
+                    rows.append(row)
+                
+                if rows:
+                    # 垂直拼接所有行
+                    combined = np.vstack(rows)
+                    
+                    # RGB & Depth窗口占据屏幕右半部分
+                    # 目标尺寸：屏幕右半部分（宽=屏幕宽/2，高=屏幕高）
+                    target_width = screen_width // 2
+                    target_height = screen_height
+                    
+                    # 计算缩放比例，保持宽高比
+                    original_height, original_width = combined.shape[:2]
+                    scale_h = target_height / original_height
+                    scale_w = target_width / original_width
+                    scale = min(scale_h, scale_w) * 0.95  # 稍微缩小一点，留边距
+                    
+                    new_width = int(original_width * scale)
+                    new_height = int(original_height * scale)
+                    
+                    # 缩放图像
+                    display_img = cv2.resize(combined, (new_width, new_height))
+                    
+                    # 显示窗口并设置位置（屏幕右半部分）
+                    cv2.namedWindow('Multi-Device RGB & Depth', cv2.WINDOW_NORMAL)
+                    cv2.imshow('Multi-Device RGB & Depth', display_img)
+                    cv2.moveWindow('Multi-Device RGB & Depth', screen_width // 2, 0)
+                    cv2.resizeWindow('Multi-Device RGB & Depth', new_width, new_height)
+                
                 end_time = time.time()
-                #if end_time - start_time > 10:
-                    #cv2.imwrite(os.path.join('tmp', f'rgb_{i}_{end_time}.jpg'), img*255)
 
 
             #cv2.imshow('Depth-1', depthSHW[..., 1, :, :, 0])
