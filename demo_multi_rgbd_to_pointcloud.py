@@ -39,7 +39,7 @@ from vggt.utils.load_fn import load_and_preprocess_images
 from vggt.utils.geometry import closed_form_inverse_se3, unproject_depth_map_to_point_map
 from vggt.utils.pose_enc import pose_encoding_to_extri_intri
 
-MAX_DEVICES = 4
+MAX_DEVICES = 5
 curr_device_cnt = 0
 
 MAX_QUEUE_SIZE = 6
